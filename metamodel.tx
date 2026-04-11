@@ -29,7 +29,7 @@ ComponentProperties:
 ;
 
 TierType: 
-    'presentation' | 'communication' | 'logic' | 'data' | 'physical' | 'edge'
+    'presentation' | 'communication' | 'logic' | 'data' | 'physical' | 'edge' | 'external' 
 ; 
 
 // Generalised but still adapted to critical infrastructure context
@@ -38,6 +38,7 @@ ComponentType:
     'mobile_app'      | 
     'api_gateway'     | 
     'microservice'    | 
+    'domain_service'  | 
     'event_broker'    | 
     'dashboard'       | 
     'database'        | 
@@ -63,10 +64,15 @@ ConnectorType:
 
 ConnectorProperties:
     '{'
+        ('style' '=' style=InteractionSyte)?
         ('protocol' '=' protocol=ProtocolType)?
     '}'
 ; 
 
 ProtocolType:
-    'REST' | 'MQTT' | 'AMQP' | 'gRPC' | 'WebSockets'
+   'Tcp' | 'WebSockets' | 'Http' | 'gRPC' |'MQTT' | 'AMQP' 
+;
+
+InteractionSyte:
+    'RequestResponse' | 'MessageQueue' | 'Pub/Sub'
 ;
