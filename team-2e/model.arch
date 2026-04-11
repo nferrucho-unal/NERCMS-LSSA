@@ -13,13 +13,13 @@ system_of_systems NERCMS_Group2 :
         component data_standarization_ms  : logic microservice { tech="python-flask" port=8102 }
         component publisher               : logic microservice { tech="python-flask" port=8103 }
 
-        component db_raw_data            : data database  { tech="postgresql" port=5432 }
-        component bucket_raw_files       : data data_lake { tech="minio" port=9000 }
-        component db_processed_data      : data database  { tech="postgresql" port=5433 }
-        component bucket_processing      : data data_lake { tech="minio" port=9001 }
+        component db_raw_data_storage            : data database  { tech="postgresql" port=5432 }
+        component bucket_raw_files_storage       : data data_lake { tech="minio" port=9000 }
+        component processed_data_db      : data database  { tech="postgresql" port=5433 }
+        component bucket_processing_file_storage      : data data_lake { tech="minio" port=9001 }
         component file_storage_metadata  : data database  { tech="postgresql" port=5434 }
 
-        component central_processing_unit : logic microservice { tech="python-flask" port=8200 }
+        component processing_unit_ms : logic microservice { tech="python-flask" port=8200 }
         component topology_status_db      : data database      { tech="postgresql"  port=5435 }
         component report_db               : data database      { tech="postgresql"  port=5436 }
         component operator_frontend       : presentation web_ui { tech="react"       port=3000 }
@@ -32,22 +32,25 @@ system_of_systems NERCMS_Group2 :
         connector event_notification data_ingestion_ms       -> data_standarization_ms { protocol=AMQP }
         connector event_notification data_standarization_ms  -> publisher              { protocol=AMQP }
 
-        connector dependency data_ingestion_ms -> db_raw_data
-        connector dependency data_ingestion_ms -> bucket_raw_files
+        connector dependency data_ingestion_ms -> db_raw_data_storage
+        connector dependency data_ingestion_ms -> bucket_raw_files_storage
         connector dependency data_ingestion_ms -> file_storage_metadata
 
-        connector dependency data_standarization_ms -> db_processed_data
-        connector dependency data_standarization_ms -> bucket_processing
+        connector dependency data_standarization_ms -> processed_data_db
+        connector dependency data_standarization_ms -> bucket_processing_file_storage
         connector dependency data_standarization_ms -> file_storage_metadata
 
-        connector dependency data_standarization_ms -> db_raw_data
-        connector dependency data_standarization_ms -> bucket_raw_files
+        connector dependency data_standarization_ms -> db_raw_data_storage
+        connector dependency data_standarization_ms -> bucket_raw_files_storage
 
-        connector data_stream data_standarization_ms -> central_processing_unit { protocol=REST }
+        connector dependency publisher -> processed_data_db
+        connector dependency publisher -> bucket_processing_file_storage
 
-        connector data_stream operator_frontend      -> central_processing_unit { protocol=REST }
-        connector dependency  central_processing_unit -> topology_status_db
-        connector dependency  central_processing_unit -> report_db
+        connector data_stream data_standarization_ms -> processing_unit_ms { style=RequestResponse protocol=Http }
+
+        connector data_stream operator_frontend      -> processing_unit_ms { style=RequestResponse protocol=Http }
+        connector dependency  processing_unit_ms -> topology_status_db
+        connector dependency  processing_unit_ms -> report_db
     }
 
     subsystem sos_frontier {
@@ -55,7 +58,7 @@ system_of_systems NERCMS_Group2 :
         component s5_c4i           : communication external_agency
     }
 
-    connector event_notification publisher               -> s2_early_warning { protocol=REST }
-    connector data_stream        publisher               -> s5_c4i           { protocol=REST }
-    connector data_stream        central_processing_unit -> s2_early_warning { protocol=REST }
-    connector data_stream        central_processing_unit -> s5_c4i           { protocol=REST }
+    connector event_notification publisher               -> s2_early_warning { style=RequestResponse protocol=Http }
+    connector data_stream        publisher               -> s5_c4i           { style=RequestResponse protocol=Http }
+    connector data_stream        processing_unit_ms -> s2_early_warning { style=RequestResponse protocol=Http }
+    connector data_stream        processing_unit_ms -> s5_c4i           { style=RequestResponse protocol=Http }
