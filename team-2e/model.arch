@@ -19,6 +19,11 @@ system_of_systems NERCMS_Group2 :
         component bucket_processing      : data data_lake { tech="minio" port=9001 }
         component file_storage_metadata  : data database  { tech="postgresql" port=5434 }
 
+        component central_processing_unit : logic microservice { tech="python-flask" port=8200 }
+        component topology_status_db      : data database      { tech="postgresql"  port=5435 }
+        component report_db               : data database      { tech="postgresql"  port=5436 }
+        component operator_frontend       : presentation web_ui { tech="react"       port=3000 }
+
         connector data_stream hydro_sensor   -> data_ingestion_ms { protocol=MQTT }
         connector data_stream seismic_sensor -> data_ingestion_ms { protocol=MQTT }
         connector data_stream atmo_sensor    -> data_ingestion_ms { protocol=MQTT }
@@ -34,6 +39,15 @@ system_of_systems NERCMS_Group2 :
         connector dependency data_standarization_ms -> db_processed_data
         connector dependency data_standarization_ms -> bucket_processing
         connector dependency data_standarization_ms -> file_storage_metadata
+
+        connector dependency data_standarization_ms -> db_raw_data
+        connector dependency data_standarization_ms -> bucket_raw_files
+
+        connector data_stream data_standarization_ms -> central_processing_unit { protocol=REST }
+
+        connector data_stream operator_frontend      -> central_processing_unit { protocol=REST }
+        connector dependency  central_processing_unit -> topology_status_db
+        connector dependency  central_processing_unit -> report_db
     }
 
     subsystem sos_frontier {
@@ -41,5 +55,7 @@ system_of_systems NERCMS_Group2 :
         component s5_c4i           : communication external_agency
     }
 
-    connector event_notification publisher -> s2_early_warning { protocol=REST }
-    connector data_stream        publisher -> s5_c4i           { protocol=REST }
+    connector event_notification publisher               -> s2_early_warning { protocol=REST }
+    connector data_stream        publisher               -> s5_c4i           { protocol=REST }
+    connector data_stream        central_processing_unit -> s2_early_warning { protocol=REST }
+    connector data_stream        central_processing_unit -> s5_c4i           { protocol=REST }
