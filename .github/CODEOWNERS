@@ -11,8 +11,7 @@
 # 2e: @dbustos10
 
 # Shared metamodel affects all teams.
-/metamodel.tx @Sreyeso @sespinosab
-# /metamodel.tx @dbustos106
+/metamodel.tx @Sreyeso @sespinosab @dbustos106
 
 # Team-specific ownership rules.
 /team-2a/ @Sreyeso
