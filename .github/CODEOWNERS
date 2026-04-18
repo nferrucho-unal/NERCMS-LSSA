@@ -13,9 +13,7 @@
 # Shared metamodel affects all teams.
 /metamodel.tx @Sreyeso @sespinosab @dbustos106
 
-# Team-specific ownership rules.
-/team-2a/ @Sreyeso
-# /team-2b/ @<pending-username>
-# /team-2c/ @<pending-username>
-/team-2d/ @sespinosab
-/team-2e/ @dbustos106
+/build_model.py @Sreyeso
+/main_model.template.arch @Sreyeso
+
+# relaxing individual code work
