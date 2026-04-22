@@ -1,0 +1,134 @@
+system_of_systems NERCMS_SoS :
+
+    // =============================================================
+    // SYSTEM 1 (Team 2E: Edge Data Acquisition)
+    // =============================================================
+    subsystem data_acquisition_edge {
+
+        component edge_node_regional : edge edge_node { tech="container-runtime" }
+
+        component hydro_sensor    : physical sensor { tech="hydrological-station" }
+        component seismic_sensor  : physical sensor { tech="seismograph" }
+        component atmo_sensor     : physical sensor { tech="weather-station" }
+        component camera          : physical sensor { tech="ip-camera-rtsp" }
+
+        component data_ingestion_ms       : logic microservice { tech="python-flask" port=8101 }
+        component data_standarization_ms  : logic microservice { tech="python-flask" port=8102 }
+        component publisher               : logic microservice { tech="python-flask" port=8103 }
+
+        component db_raw_data_storage            : data database  { tech="postgresql" port=5432 }
+        component bucket_raw_files_storage       : data data_lake { tech="minio" port=9000 }
+        component processed_data_db              : data database  { tech="postgresql" port=5433 }
+        component bucket_processing_file_storage : data data_lake { tech="minio" port=9001 }
+        component file_storage_metadata          : data database  { tech="postgresql" port=5434 }
+
+        component processing_unit_ms  : logic microservice        { tech="python-flask" port=8200 }
+        component topology_status_db  : data database              { tech="postgresql"  port=5435 }
+        component report_db           : data database              { tech="postgresql"  port=5436 }
+        component operator_frontend   : presentation web_ui        { tech="react"       port=3000 }
+        component interface_gateway   : communication api_gateway  { tech="nginx"       port=8080 }
+        component client_web_browser  : presentation web_ui        { tech="web-browser" }
+
+        connector data_stream hydro_sensor   -> data_ingestion_ms { protocol=MQTT }
+        connector data_stream seismic_sensor -> data_ingestion_ms { protocol=MQTT }
+        connector data_stream atmo_sensor    -> data_ingestion_ms { protocol=MQTT }
+        connector data_stream camera         -> data_ingestion_ms { protocol=WebSockets }
+
+        connector event_notification data_ingestion_ms       -> data_standarization_ms { style=MessageQueue protocol=AMQP }
+        connector event_notification data_standarization_ms  -> publisher              { style=MessageQueue protocol=AMQP }
+
+        connector dependency data_ingestion_ms -> db_raw_data_storage
+        connector dependency data_ingestion_ms -> bucket_raw_files_storage
+        connector dependency data_ingestion_ms -> file_storage_metadata
+
+        connector dependency data_standarization_ms -> processed_data_db
+        connector dependency data_standarization_ms -> bucket_processing_file_storage
+        connector dependency data_standarization_ms -> file_storage_metadata
+
+        connector dependency data_standarization_ms -> db_raw_data_storage
+        connector dependency data_standarization_ms -> bucket_raw_files_storage
+
+        connector dependency publisher -> processed_data_db
+        connector dependency publisher -> bucket_processing_file_storage
+
+        connector data_stream data_standarization_ms -> interface_gateway   { style=RequestResponse protocol=Http }
+
+        connector data_stream interface_gateway     -> processing_unit_ms { style=RequestResponse protocol=Http }
+        connector data_stream processing_unit_ms    -> interface_gateway  { style=RequestResponse protocol=Http }
+        connector data_stream operator_frontend     -> processing_unit_ms { style=RequestResponse protocol=Http }
+        connector data_stream client_web_browser    -> operator_frontend  { style=RequestResponse protocol=Http }
+        connector dependency  processing_unit_ms -> topology_status_db
+        connector dependency  processing_unit_ms -> report_db
+    }
+
+    connector event_notification data_acquisition_edge.publisher          -> s2 { style=MessageQueue protocol=AMQP }
+    connector event_notification data_acquisition_edge.publisher          -> s5 { style=MessageQueue protocol=AMQP }
+    connector data_stream        data_acquisition_edge.interface_gateway  -> s2 { style=RequestResponse protocol=Http }
+    connector data_stream        data_acquisition_edge.interface_gateway  -> s5 { style=RequestResponse protocol=Http }
+
+    // =============================================================
+    // SYSTEM 2 (Team 2B)
+    // =============================================================
+    subsystem s2 { }
+
+    // =============================================================
+    // SYSTEM 3 (Team 2C)
+    // =============================================================
+    subsystem s3 { }
+
+    // =============================================================
+    // SYSTEM 4 (Team 2A)
+    // =============================================================
+    subsystem s4 {
+        component Gateway : communication api_gateway { availability = critical recoverability = fast performance = realtime security = internal min_replicas = 2}
+        component BrokerIn : communication event_broker { availability = critical recoverability = fast performance = realtime security = public }
+        component Controller : logic microservice { availability = high recoverability = fast performance = batch security = restricted }
+        component Blackboard : logic domain_service { availability = standard recoverability = normal performance = batch security = restricted }
+        component Audit : logic microservice  { availability = standard recoverability = normal performance = batch security = restricted }
+        component Health : logic microservice { availability = standard recoverability = fast performance = batch security = restricted }
+        component BrokerOut : communication event_broker { availability = critical recoverability = fast performance = realtime security = public }
+        component Audit_Db : data database { availability = standard recoverability = normal performance = batch security = restricted }
+        component Recovery_Db : data database { availability = standard recoverability = normal performance = batch security = restricted }
+
+        connector data_stream Gateway -> BrokerIn { style = MessageQueue  protocol = AMQP encrypted = true }
+        connector event_notification BrokerIn -> Controller { style = MessageQueue protocol = AMQP encrypted = true}
+        connector event_notification BrokerIn -> Audit { style = MessageQueue protocol = AMQP encrypted = true}
+        connector dependency Controller -> Blackboard { style = RequestResponse protocol = Http encrypted = true}
+        connector control_command Controller -> BrokerOut { style = Pub/Sub protocol = Tcp encrypted = true}
+        connector dependency Blackboard -> Recovery_Db 
+        connector dependency Audit -> Audit_Db
+        connector event_notification BrokerOut -> Audit { style = Pub/Sub protocol = Tcp encrypted = true }
+        connector event_notification BrokerOut -> s5 { style = Pub/Sub protocol = Tcp encrypted = true }
+    }
+
+    subsystem externalSystems{
+        component FireFighters : external external_agency 
+        component CivilDefense : external external_agency 
+        component Medics : external external_agency 
+        component Rescue : external external_agency 
+
+        connector data_stream FireFighters -> s4.Gateway { style = RequestResponse protocol = Http encrypted = true }
+        connector data_stream CivilDefense -> s4.Gateway { style = RequestResponse protocol = Http encrypted = true }
+
+        connector data_stream Medics -> s4.Gateway { style = RequestResponse protocol = Http encrypted = true }
+        connector data_stream Rescue -> s4.Gateway { style = RequestResponse protocol = Http encrypted = true }
+        
+        connector event_notification s4.BrokerOut -> FireFighters { style = Pub/Sub protocol = Tcp encrypted = true }
+        connector event_notification s4.BrokerOut -> CivilDefense { style = Pub/Sub protocol = Tcp encrypted = true }
+        connector event_notification s4.BrokerOut -> Medics { style = Pub/Sub protocol = Tcp encrypted = true }
+        connector event_notification s4.BrokerOut -> Rescue { style = Pub/Sub protocol = Tcp encrypted = true }
+    }
+
+    connector event_notification s2 -> s4.BrokerIn {style = MessageQueue protocol = Tcp encrypted = true }
+    connector event_notification s5 -> s4.BrokerIn { style = MessageQueue protocol = Tcp encrypted = true }
+    connector event_notification s3 -> s4.BrokerIn { style = MessageQueue protocol = Tcp encrypted = true }
+
+    // =============================================================
+    // SYSTEM 5 (Team 2D)
+    // =============================================================
+    subsystem s5 { }
+
+    // -------------------------------------------------------------
+    // CONECTORES GLOBAL SOS
+    // (Opcionales si ya se definen dentro de cada subsistema)
+    // -------------------------------------------------------------

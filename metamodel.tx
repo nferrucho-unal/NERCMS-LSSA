@@ -1,8 +1,15 @@
 Model: 
     'system_of_systems' name=ID ':' 
-        subsystems*=Subsystem
-        sos_connectors*=Connector 
+        elements*=ModelElement
 ; 
+
+ModelElement:
+    Subsystem | Connector | Comment
+;
+
+Comment:
+    /\/\/.*$/
+;
 
 // Support for SoS modeling
 Subsystem:
@@ -12,7 +19,7 @@ Subsystem:
 ;
 
 Element: 
-    Component | Connector 
+    Component | Connector | Comment
 ; 
 
 Component: 
@@ -23,50 +30,98 @@ Component:
 // Attributes, easily extensibles
 ComponentProperties:
     '{'
-        ('tech' '=' tech=STRING)?
-        ('port' '=' port=INT)?
+        ('availability'   '=' availability   = AvailabilityLevel)?
+        ('recoverability' '=' recoverability = RecoverabilityLevel)?
+        ('performance'    '=' performance    = PerformanceLevel)?
+        ('auth'           '=' auth           = AuthLevel)?
+        ('security'       '=' security       = SecurityLevel)?
+        ('min_replicas'   '=' replicas       = INT)?
+        ('max_replicas'   '=' replicas       = INT)?
+        ('mem_limit'      '=' mem_limit      = STRING)?
+        ('cpu_limit'      '=' cpu_limit      = FLOAT)?
+        ('tech'           '=' tech           = STRING)?
+        ('port'           '=' port           = INT)?
     '}'
 ;
 
 TierType: 
-    'presentation' | 'communication' | 'logic' | 'data' | 'physical' | 'edge'
+    'presentation' | 'communication' | 'logic' | 'data' | 'physical' | 'edge' | 'external' 
 ; 
 
 // Generalised but still adapted to critical infrastructure context
 ComponentType: 
     'web_ui'          | 
+    'interface'       | 
     'mobile_app'      | 
     'api_gateway'     | 
     'microservice'    | 
+    'domain_service'  | 
     'event_broker'    | 
     'dashboard'       | 
     'database'        | 
     'data_lake'       | 
+    'bucket'          | 
     'edge_node'       | 
     'sensor'          | 
     'actuator'        |
     'external_agency'   
 ; 
 
+Connectable:
+    Component | Subsystem
+;
+
 // Enriched connectors with protocol information
 Connector: 
-    'connector' type=ConnectorType from=[Component] '->' to=[Component] 
+    'connector' type=ConnectorType from=[Connectable|FQN] '->' to=[Connectable|FQN] 
     (properties=ConnectorProperties)?
 ; 
 
+FQN:
+    ID ('.' ID)*
+;
+
 ConnectorType: 
-    'data_stream'       | 
-    'control_command'   | 
-    'event_notification'| 
+    'data_stream'           | 
+    'control_command'       | 
+    'event_notification'    | 
     'dependency' 
 ;
 
 ConnectorProperties:
     '{'
-        ('protocol' '=' protocol=ProtocolType)?
+        ('style'      '=' style      = InteractionStyle)?
+        ('protocol'   '=' protocol   = ProtocolType)?
+        ('timeout_ms' '=' timeout_ms = INT)?
+        ('encrypted'  '=' encrypted  = BOOL)?
+        ('rate_limit' '=' rate_limit = INT)?
     '}'
 ; 
 
 ProtocolType:
-    'REST' | 'MQTT' | 'AMQP' | 'gRPC' | 'WebSockets'
+    'Tcp' | 'WebSockets' | 'Http' | 'gRPC' |'MQTT' | 'AMQP' | 'REST' | 'RTCP'
+;
+
+InteractionStyle:
+    'RequestResponse' | 'MessageQueue' | 'Pub/Sub'
+;
+
+AvailabilityLevel:
+    'critical' | 'high' | 'standard'
+;
+
+PerformanceLevel:
+    'realtime' | 'interactive' | 'batch'
+;
+
+SecurityLevel:
+    'restricted' | 'internal' | 'public'
+;
+
+AuthLevel:
+    'token' | 'cookie' | 'password' | 'mfa' | 'keypass'
+;
+
+RecoverabilityLevel:
+    'fast' | 'normal' | 'manual'
 ;
