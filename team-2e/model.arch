@@ -1,61 +1,301 @@
-system_of_systems NERCMS_Group2 :
+// =========================
+// SYSTEM 1 - Data Acquisition and Edge
+// Versión: 2026-1 refined
+// =========================
 
-    subsystem data_acquisition_edge {
+subsystem data_acquisition_edge {
 
-        component edge_node_regional : edge edge_node { tech="container-runtime" }
+    // =========================
+    // Nivel de Sensado 
+    // =========================
 
-        component hydro_sensor    : physical sensor { tech="hydrological-station" }
-        component seismic_sensor  : physical sensor { tech="seismograph" }
-        component atmo_sensor     : physical sensor { tech="weather-station" }
-        component camera          : physical sensor { tech="ip-camera-rtsp" }
-
-        component data_ingestion_ms       : logic microservice { tech="python-flask" port=8101 }
-        component data_standarization_ms  : logic microservice { tech="python-flask" port=8102 }
-        component publisher               : logic microservice { tech="python-flask" port=8103 }
-
-        component db_raw_data            : data database  { tech="postgresql" port=5432 }
-        component bucket_raw_files       : data data_lake { tech="minio" port=9000 }
-        component db_processed_data      : data database  { tech="postgresql" port=5433 }
-        component bucket_processing      : data data_lake { tech="minio" port=9001 }
-        component file_storage_metadata  : data database  { tech="postgresql" port=5434 }
-
-        component central_processing_unit : logic microservice { tech="python-flask" port=8200 }
-        component topology_status_db      : data database      { tech="postgresql"  port=5435 }
-        component report_db               : data database      { tech="postgresql"  port=5436 }
-        component operator_frontend       : presentation web_ui { tech="react"       port=3000 }
-
-        connector data_stream hydro_sensor   -> data_ingestion_ms { protocol=MQTT }
-        connector data_stream seismic_sensor -> data_ingestion_ms { protocol=MQTT }
-        connector data_stream atmo_sensor    -> data_ingestion_ms { protocol=MQTT }
-        connector data_stream camera         -> data_ingestion_ms { protocol=WebSockets }
-
-        connector event_notification data_ingestion_ms       -> data_standarization_ms { protocol=AMQP }
-        connector event_notification data_standarization_ms  -> publisher              { protocol=AMQP }
-
-        connector dependency data_ingestion_ms -> db_raw_data
-        connector dependency data_ingestion_ms -> bucket_raw_files
-        connector dependency data_ingestion_ms -> file_storage_metadata
-
-        connector dependency data_standarization_ms -> db_processed_data
-        connector dependency data_standarization_ms -> bucket_processing
-        connector dependency data_standarization_ms -> file_storage_metadata
-
-        connector dependency data_standarization_ms -> db_raw_data
-        connector dependency data_standarization_ms -> bucket_raw_files
-
-        connector data_stream data_standarization_ms -> central_processing_unit { protocol=REST }
-
-        connector data_stream operator_frontend      -> central_processing_unit { protocol=REST }
-        connector dependency  central_processing_unit -> topology_status_db
-        connector dependency  central_processing_unit -> report_db
+    component hydrological_sensor : physical sensor {
+        availability = critical
+        performance = realtime
+        security = restricted
+        auth = password
+        tech = "LoRaWAN/MQTT"
     }
 
-    subsystem sos_frontier {
-        component s2_early_warning : communication external_agency
-        component s5_c4i           : communication external_agency
+    component seismic_sensor : physical sensor {
+        availability = critical
+        performance = realtime
+        security = restricted 
+        auth = password
+        tech = "LoRaWAN/MQTT"
     }
 
-    connector event_notification publisher               -> s2_early_warning { protocol=REST }
-    connector data_stream        publisher               -> s5_c4i           { protocol=REST }
-    connector data_stream        central_processing_unit -> s2_early_warning { protocol=REST }
-    connector data_stream        central_processing_unit -> s5_c4i           { protocol=REST }
+    component atmospheric_sensor : physical sensor {
+        availability = critical
+        performance = realtime
+        security = restricted
+        auth = password
+        tech = "LoRaWAN/MQTT"
+    }
+
+    component camera : physical sensor {
+        availability = high
+        performance = realtime 
+        security = restricted
+        auth = password
+        tech = "RTSP"
+        port = 6554
+    }
+
+    // =========================
+    // Nivel de Nodos Borde
+    // =========================
+    
+    // Capa Logic
+    component data_ingestion_ms : logic microservice {
+        availability = critical
+        performance = realtime
+        recoverability = fast
+        security = internal
+        auth = token
+        mem_limit = "512Mi"
+        cpu_limit = 0.5
+        port = 6001
+    }
+
+    component notification_mb : communication event_broker {
+        availability = critical
+        performance = realtime
+        recoverability = fast
+        security = internal
+        auth = password
+        tech = "RabbitMQ/Kafka"
+        mem_limit = "1.5Gi"
+        port = 6672
+    }
+
+    component data_standardization_ms : logic microservice {
+        availability = high
+        performance = interactive
+        recoverability = fast
+        security = internal
+        auth = token
+        mem_limit = "1Gi"
+        cpu_limit = 1.0
+        port = 6002
+    }
+
+    // Capa Data
+    component raw_data : data database {
+        availability = high
+        performance = interactive
+        recoverability = fast
+        security = internal
+        auth = password
+        tech = "PostgreSQL"
+        port = 6432
+    }
+
+    component raw_files : data bucket {
+        availability = high
+        performance = interactive
+        recoverability = fast
+        security = internal
+        auth = password
+        tech = "S3-Compatible"
+        port = 6900
+    }
+
+    component processed_data : data database {
+        availability = high
+        performance = interactive
+        recoverability = fast
+        security = internal
+        auth = password
+        tech = "PostgreSQL"
+        port = 6433
+    }
+
+    component processed_files : data bucket {
+        availability = high
+        performance = interactive
+        recoverability = fast
+        security = internal
+        auth = password
+        tech = "S3-Compatible"
+        port = 6901
+    }    
+
+    // Capa Communication
+    component publisher : communication microservice {
+        availability = high
+        performance = interactive
+        recoverability = fast
+        security = internal
+        auth = token
+        mem_limit = "256Mi"
+        port = 6003
+    }
+
+    // =========================
+    // Nivel de Nodo Central
+    // =========================
+
+    // Capa Presentation
+    component operator_frontend : presentation web_ui {
+        availability = standard
+        performance = interactive
+        recoverability = normal
+        security = restricted
+        auth = mfa
+        port = 6443
+    }
+
+    // Capa Logic
+    component processing_unit_ms : logic microservice {
+        availability = high
+        performance = batch
+        recoverability = normal
+        security = internal
+        auth = token
+        port = 6004
+    }
+
+    // Capa Communication
+    component interface : communication interface {
+        availability = high
+        performance = interactive
+        recoverability = normal
+        security = restricted
+        auth = token
+        port = 6080
+    }
+
+    // Capa Data
+    component topology_status_db : data database {
+        availability = high
+        performance = interactive
+        recoverability = normal 
+        security = internal
+        auth = password
+        tech = "PostgreSQL"
+        port = 6434
+    }
+
+    component report_db : data database {
+        availability = high
+        performance = interactive
+        recoverability = normal 
+        security = internal
+        auth = password
+        tech = "PostgreSQL"
+        port = 6435
+    }    
+
+    // ----------------------------------------------------------
+    // CONECTORES INTERNOS (Niveles y Componentes)
+    // ----------------------------------------------------------
+
+    // Sensado -> Borde
+    connector event_notification hydrological_sensor -> data_ingestion_ms { 
+        protocol = MQTT 
+        style = Pub/Sub
+        encrypted = true
+    }
+
+    connector event_notification seismic_sensor -> data_ingestion_ms { 
+        protocol = MQTT 
+        style = Pub/Sub
+        encrypted = true
+    }
+
+    connector event_notification atmospheric_sensor -> data_ingestion_ms { 
+        protocol = MQTT 
+        style = Pub/Sub
+        encrypted = true
+    }
+
+    connector data_stream camera -> data_ingestion_ms { 
+        protocol = RTCP 
+        encrypted = true
+    }
+
+    // Internos Nodo Borde
+    connector event_notification data_ingestion_ms -> notification_mb { 
+        style = Pub/Sub 
+        protocol = AMQP
+        encrypted = false
+    }
+
+    connector event_notification notification_mb -> data_standardization_ms { 
+        style = MessageQueue 
+        protocol = AMQP
+        encrypted = false
+    }
+        
+    connector dependency data_ingestion_ms -> raw_data { protocol = Tcp }
+    connector dependency data_ingestion_ms -> raw_files { protocol = Http }
+        
+    connector dependency data_standardization_ms -> raw_data { protocol = Tcp }
+    connector dependency data_standardization_ms -> raw_files { protocol = Http }
+    connector dependency data_standardization_ms -> processed_data { protocol = Tcp }
+    connector dependency data_standardization_ms -> processed_files { protocol = Http }
+        
+    connector dependency publisher -> processed_data { protocol = Tcp }
+    connector dependency publisher -> processed_files { protocol = Http }
+
+    // Borde -> Central (Ruta Lenta / Agregación)
+    connector data_stream data_standardization_ms -> interface { 
+        style = RequestResponse 
+        protocol = REST 
+        encrypted = true
+    }
+
+    // Internos Nodo Central
+    connector data_stream operator_frontend -> processing_unit_ms { protocol = REST }
+
+    connector data_stream interface -> processing_unit_ms { 
+        style = RequestResponse 
+        protocol = REST 
+        encrypted = false
+    }
+
+    connector data_stream processing_unit_ms -> interface { 
+        style = RequestResponse 
+        protocol = REST 
+        encrypted = false
+    }
+        
+    connector dependency processing_unit_ms -> topology_status_db { protocol = Tcp }
+    connector dependency processing_unit_ms -> report_db { protocol = Tcp }     
+
+}
+
+// Ruta Rápida: Desde el Borde (Publisher) a otros sistemas
+connector event_notification data_acquisition_edge.publisher -> s2 { 
+    style = Pub/Sub 
+    protocol = AMQP
+    timeout_ms = 500
+    encrypted = true
+}
+
+connector event_notification data_acquisition_edge.publisher -> s5 { 
+    style = Pub/Sub 
+    protocol = AMQP 
+    timeout_ms = 500
+    encrypted = true
+}
+
+// Ruta Lenta / Auditoría: Desde el Central (Interface) a otros sistemas
+connector data_stream data_acquisition_edge.interface -> s5 { 
+    style = RequestResponse 
+    protocol = REST 
+    encrypted = true
+}
+
+connector data_stream s5 -> data_acquisition_edge.interface { 
+    style = RequestResponse 
+    protocol = REST 
+    encrypted = true
+}
+
+connector data_stream s2 -> data_acquisition_edge.interface { 
+    style = RequestResponse 
+    protocol = REST 
+    encrypted = true
+}
